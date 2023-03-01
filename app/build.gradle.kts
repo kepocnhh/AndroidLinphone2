@@ -1,6 +1,7 @@
 repositories {
-    mavenCentral()
     google()
+    maven("https://linphone.org/maven_repository")
+    mavenCentral()
 }
 
 plugins {
@@ -52,5 +53,6 @@ output.outputFileName.set("${rootProject.name}-${variant.name}-${Version.Applica
 
 dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("androidx.fragment:fragment-ktx:1.5.5")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.5.1")
+    implementation("org.linphone:linphone-sdk-android:5.2.28")
 }
