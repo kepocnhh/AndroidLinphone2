@@ -23,8 +23,8 @@ import org.linphone.core.TransportType
 
 class CallService : Service() {
     sealed interface Broadcast {
-        class OnRegistrationState(val account: Account?) : Broadcast
-        class OnCallState(val call: Call?) : Broadcast
+        class OnRegistrationState(val state: RegistrationState?, val account: Account?) : Broadcast
+        class OnCallState(val state: Call.State?, val call: Call?) : Broadcast
     }
 
     companion object {
@@ -48,7 +48,7 @@ class CallService : Service() {
             message: String
         ) {
             scope.launch {
-                _broadcast.emit(Broadcast.OnRegistrationState(account))
+                _broadcast.emit(Broadcast.OnRegistrationState(state, account))
             }
             when (state) {
                 RegistrationState.Ok -> {
@@ -68,7 +68,7 @@ class CallService : Service() {
             message: String
         ) {
             scope.launch {
-                _broadcast.emit(Broadcast.OnCallState(call))
+                _broadcast.emit(Broadcast.OnCallState(state, call))
             }
             when (state) {
                 Call.State.IncomingReceived -> {
@@ -137,13 +137,15 @@ class CallService : Service() {
             ACTION_REQUEST_REGISTRATION_STATE -> {
                 println("$TAG: on request registration state")
                 scope.launch {
-                    _broadcast.emit(Broadcast.OnRegistrationState(core?.defaultAccount))
+                    val account = core?.defaultAccount
+                    _broadcast.emit(Broadcast.OnRegistrationState(account?.state, account))
                 }
             }
             ACTION_REQUEST_CALL_STATE -> {
                 println("$TAG: on request call state")
                 scope.launch {
-                    _broadcast.emit(Broadcast.OnCallState(core?.currentCall))
+                    val call = core?.currentCall
+                    _broadcast.emit(Broadcast.OnCallState(call?.state, call))
                 }
             }
             ACTION_EXIT -> {
@@ -193,7 +195,7 @@ class CallService : Service() {
             println("$TAG: core stop error: $e")
         }
         scope.launch {
-            _broadcast.emit(Broadcast.OnRegistrationState(null))
+            _broadcast.emit(Broadcast.OnRegistrationState(null, null))
         }
     }
 }

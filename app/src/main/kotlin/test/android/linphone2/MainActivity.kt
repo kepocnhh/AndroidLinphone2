@@ -146,15 +146,14 @@ internal class MainActivity : AppCompatActivity() {
     private fun onBroadcast(broadcast: CallService.Broadcast) {
         when (broadcast) {
             is CallService.Broadcast.OnRegistrationState -> {
-                val account = broadcast.account
-                if (account == null) {
-                    println("$TAG: no account")
-                    renderRegistration()
-                    return
-                }
-                when (account.state) {
+                when (broadcast.state) {
                     RegistrationState.Ok -> {
                         println("$TAG: on registration ok")
+                        val account = broadcast.account
+                        if (account == null) {
+                            println("$TAG: no account")
+                            TODO()
+                        }
                         renderRegistered(account)
                         lifecycleScope.launch {
                             withContext(Dispatchers.IO) {
@@ -180,7 +179,7 @@ internal class MainActivity : AppCompatActivity() {
                         renderWaiter()
                     }
                     else -> {
-                        println("$TAG: on registration: ${account.state}")
+                        println("$TAG: on registration: ${broadcast.state}")
                     }
                 }
             }

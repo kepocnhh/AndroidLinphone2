@@ -7,6 +7,7 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
@@ -16,9 +17,17 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import org.linphone.core.Call
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class CallActivity : AppCompatActivity() {
     private val TAG = "[${this::class.java.simpleName}|${hashCode()}]"
@@ -28,6 +37,7 @@ class CallActivity : AppCompatActivity() {
     private var statusTextView: TextView? = null
     private var addressTextView: TextView? = null
     private var accountTextView: TextView? = null
+    private var timeTextView: TextView? = null
 
     private fun onIncoming(call: Call) {
         val address = call.remoteAddress.asStringUriOnly()
@@ -37,29 +47,62 @@ class CallActivity : AppCompatActivity() {
         checkNotNull(hangUpButton).setOnClickListener {
             call.terminate()
         }
+        checkNotNull(pickUpButton).also {
+            it.isEnabled = true
+            it.setOnClickListener {
+                call.accept()
+            }
+        }
+    }
+
+    private fun onStreamsRunning(call: Call) {
+        val address = call.remoteAddress.asStringUriOnly()
+        checkNotNull(addressTextView).text = "address: $address"
+        val username = call.remoteAddress.username
+        checkNotNull(accountTextView).text = "account: $username"
+        checkNotNull(hangUpButton).setOnClickListener {
+            call.terminate()
+        }
+        checkNotNull(pickUpButton).also {
+            it.isEnabled = false
+            it.setOnClickListener(null)
+        }
+        lifecycleScope.launch {
+            val timeTextView = checkNotNull(timeTextView)
+            val startDate = call.callLog.startDate.seconds
+            println("$TAG: call start: ${Date(startDate.inWholeMilliseconds)}")
+            val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.US)
+            timeFormat.timeZone = TimeZone.getTimeZone("UTC")
+            while (!isDestroyed) {
+                val text = timeFormat.format(call.duration.seconds.inWholeMilliseconds)
+                timeTextView.text = text
+                delay(1.seconds)
+            }
+            println("$TAG: timer finish")
+        }
     }
 
     private fun onBroadcast(broadcast: CallService.Broadcast) {
         when (broadcast) {
             is CallService.Broadcast.OnCallState -> {
-                val call = broadcast.call
-                if (call == null) {
-                    println("$TAG: no call")
-                    finish()
-                    return
-                }
-                checkNotNull(statusTextView).text = "call state: ${call.state}"
-                when (call.state) {
+                checkNotNull(statusTextView).text = "call state: ${broadcast.state}"
+                when (broadcast.state) {
                     Call.State.IncomingReceived -> {
                         println("$TAG: on call incoming")
+                        val call = broadcast.call ?: TODO()
                         onIncoming(call)
+                    }
+                    Call.State.StreamsRunning -> {
+                        println("$TAG: on call streams running")
+                        val call = broadcast.call ?: TODO()
+                        onStreamsRunning(call)
                     }
                     Call.State.Released -> {
                         println("$TAG: on call released")
                         finish()
                     }
                     else -> {
-                        println("$TAG: on call ${call.state}")
+                        println("$TAG: on call ${broadcast.state}")
                     }
                 }
             }
@@ -118,6 +161,14 @@ class CallActivity : AppCompatActivity() {
                     accountTextView = it
                     rows.addView(it)
                 }
+                TextView(context).also {
+                    it.layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                    timeTextView = it
+                    rows.addView(it)
+                }
                 LinearLayout(context).also { columns ->
                     Button(context).also {
                         it.layoutParams = LinearLayout.LayoutParams(
@@ -157,5 +208,9 @@ class CallActivity : AppCompatActivity() {
             it.action = CallService.ACTION_REQUEST_CALL_STATE
         }
         startService(intent)
+    }
+
+    override fun onBackPressed() {
+        // todo
     }
 }
