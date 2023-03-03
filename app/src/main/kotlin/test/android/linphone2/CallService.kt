@@ -31,6 +31,7 @@ class CallService : Service() {
         val ACTION_REGISTER = "${this::class.java.name}:ACTION_REGISTER"
         val ACTION_REQUEST_REGISTRATION_STATE = "${this::class.java.name}:ACTION_REQUEST_REGISTRATION_STATE"
         val ACTION_REQUEST_CALL_STATE = "${this::class.java.name}:ACTION_REQUEST_CALL_STATE"
+        val ACTION_REQUEST_CALL_TERMINATE = "${this::class.java.name}:ACTION_REQUEST_CALL_TERMINATE"
         val ACTION_EXIT = "${this::class.java.name}:ACTION_EXIT"
         val _broadcast = MutableSharedFlow<Broadcast>()
         val broadcast = _broadcast.asSharedFlow()
@@ -74,6 +75,16 @@ class CallService : Service() {
                 Call.State.IncomingReceived -> {
                     println("$TAG: on call incoming")
                     onIncoming(call)
+                }
+                Call.State.StreamsRunning -> {
+                    println("$TAG: on call streams running")
+                    val audioDevices = core.audioDevices
+                    audioDevices.forEachIndexed { index, device ->
+                        println("$TAG: $index/${audioDevices.lastIndex}] " + device.deviceName + " " + device.type.name)
+                    }
+                    println("$TAG: core media device: " + core.mediaDevice)
+                    println("$TAG: core default input audio: " + core.defaultInputAudioDevice?.deviceName)
+                    println("$TAG: core input audio: " + core.inputAudioDevice?.deviceName)
                 }
                 else -> {
                     println("$TAG: on call: $state")
@@ -151,6 +162,10 @@ class CallService : Service() {
             ACTION_EXIT -> {
                 println("$TAG: on exit")
                 stopSelf()
+            }
+            ACTION_REQUEST_CALL_TERMINATE -> {
+                println("$TAG: on request call terminate")
+                core?.currentCall?.terminate()
             }
         }
     }

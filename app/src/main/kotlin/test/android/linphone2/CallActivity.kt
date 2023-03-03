@@ -1,7 +1,9 @@
 package test.android.linphone2
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
@@ -50,7 +52,13 @@ class CallActivity : AppCompatActivity() {
         checkNotNull(pickUpButton).also {
             it.isEnabled = true
             it.setOnClickListener {
-                call.accept()
+                val isGranted = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                if (isGranted) {
+                    call.accept()
+                } else {
+                    println("$TAG: no permission")
+                    requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 42)
+                }
             }
         }
     }
@@ -78,7 +86,6 @@ class CallActivity : AppCompatActivity() {
                 timeTextView.text = text
                 delay(1.seconds)
             }
-            println("$TAG: timer finish")
         }
     }
 
@@ -212,5 +219,33 @@ class CallActivity : AppCompatActivity() {
 
     override fun onBackPressed() {
         // todo
+    }
+
+    private fun requestTerminate() {
+        val intent = Intent(this, CallService::class.java).also {
+            it.action = CallService.ACTION_REQUEST_CALL_TERMINATE
+        }
+        startService(intent)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            42 -> {
+                val index = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
+                if (index < 0) {
+                    requestTerminate()
+                    return
+                }
+                if (grantResults[index] != PackageManager.PERMISSION_GRANTED) {
+                    requestTerminate()
+                    return
+                }
+            }
+        }
     }
 }
