@@ -22,12 +22,14 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.linphone.core.Account
 import org.linphone.core.Call
 import org.linphone.core.RegistrationState
 
 internal class MainActivity : AppCompatActivity() {
     private val TAG = "[${this::class.java.simpleName}|${hashCode()}]"
 
+    private var accountTextView: TextView? = null
     private var actionButton: TextView? = null
     private var exitButton: TextView? = null
     private var host: EditText? = null
@@ -44,6 +46,7 @@ internal class MainActivity : AppCompatActivity() {
             checkNotNull(it).visibility = View.VISIBLE
         }
         listOf(
+            accountTextView,
             whom,
             host,
             port,
@@ -62,14 +65,14 @@ internal class MainActivity : AppCompatActivity() {
 
     private fun exit() {
         val intent = Intent(this, CallService::class.java).also {
-            it.action = CallService.ACTION_REQUEST
-            it.putExtra("type", CallService.EXIT)
+            it.action = CallService.ACTION_EXIT
         }
         startService(intent)
     }
 
-    private fun renderRegistered() {
+    private fun renderRegistered(account: Account) {
         listOf(
+            accountTextView,
             whom,
             actionButton,
             exitButton
@@ -85,6 +88,8 @@ internal class MainActivity : AppCompatActivity() {
         ).forEach {
             checkNotNull(it).visibility = View.GONE
         }
+        val username = account.params.identityAddress?.username
+        checkNotNull(accountTextView).text = "account: $username"
         val actionButton = checkNotNull(actionButton)
         actionButton.text = "call"
         actionButton.setOnClickListener {
@@ -108,6 +113,7 @@ internal class MainActivity : AppCompatActivity() {
             checkNotNull(it).visibility = View.VISIBLE
         }
         listOf(
+            accountTextView,
             whom,
             waiter,
             exitButton
@@ -143,17 +149,24 @@ internal class MainActivity : AppCompatActivity() {
                 when (broadcast.state) {
                     RegistrationState.Ok -> {
                         println("$TAG: on registration ok")
-                        renderRegistered()
+                        val account = broadcast.account
+                        if (account == null) {
+                            println("$TAG: no account")
+                            TODO()
+                        }
+                        renderRegistered(account)
                         lifecycleScope.launch {
                             withContext(Dispatchers.IO) {
-                                App.ldp.domain = Domain(
+                                val domain = Domain(
                                     host = checkNotNull(host).text.toString(),
                                     port = checkNotNull(port).text.toString().toIntOrNull(),
                                 )
-                                App.ldp.userCredentials = UserCredentials(
+                                if (domain != App.ldp.domain) App.ldp.domain = domain
+                                val userCredentials = UserCredentials(
                                     login = checkNotNull(username).text.toString(),
                                     password = checkNotNull(password).text.toString(),
                                 )
+                                if (userCredentials != App.ldp.userCredentials) App.ldp.userCredentials = userCredentials
                             }
                         }
                     }
@@ -171,11 +184,7 @@ internal class MainActivity : AppCompatActivity() {
                 }
             }
             is CallService.Broadcast.OnCallState -> {
-                when (broadcast.state) {
-                    else -> {
-                        println("$TAG: on call: ${broadcast.state}")
-                    }
-                }
+                // noop
             }
         }
     }
@@ -196,6 +205,14 @@ internal class MainActivity : AppCompatActivity() {
                     Gravity.CENTER_VERTICAL
                 )
                 rows.orientation = LinearLayout.VERTICAL
+                TextView(context).also {
+                    it.layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                    accountTextView = it
+                    rows.addView(it)
+                }
                 EditText(context).also {
                     it.layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -210,7 +227,7 @@ internal class MainActivity : AppCompatActivity() {
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
                     )
-                    it.hint = "port"
+                    it.hint = "port (default 5060)"
                     port = it
                     rows.addView(it)
                 }
@@ -311,8 +328,7 @@ internal class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         val intent = Intent(this, CallService::class.java).also {
-            it.action = CallService.ACTION_REQUEST
-            it.putExtra("type", CallService.REGISTRATION_STATE)
+            it.action = CallService.ACTION_REQUEST_REGISTRATION_STATE
         }
         startService(intent)
     }
