@@ -23,15 +23,15 @@ import org.linphone.core.TransportType
 
 class CallService : Service() {
     sealed interface Broadcast {
-        class OnRegistrationState(val state: RegistrationState?) : Broadcast
-        class OnCallState(val state: Call.State?) : Broadcast
+        class OnRegistrationState(val account: Account?) : Broadcast
+        class OnCallState(val call: Call?) : Broadcast
     }
 
     companion object {
         val ACTION_REGISTER = "${this::class.java.name}:ACTION_REGISTER"
-        val ACTION_REQUEST = "${this::class.java.name}:ACTION_REQUEST"
-        val REGISTRATION_STATE = "${this::class.java.name}:REGISTRATION_STATE"
-        val EXIT = "${this::class.java.name}:EXIT"
+        val ACTION_REQUEST_REGISTRATION_STATE = "${this::class.java.name}:ACTION_REQUEST_REGISTRATION_STATE"
+        val ACTION_REQUEST_CALL_STATE = "${this::class.java.name}:ACTION_REQUEST_CALL_STATE"
+        val ACTION_EXIT = "${this::class.java.name}:ACTION_EXIT"
         val _broadcast = MutableSharedFlow<Broadcast>()
         val broadcast = _broadcast.asSharedFlow()
     }
@@ -48,7 +48,7 @@ class CallService : Service() {
             message: String
         ) {
             scope.launch {
-                _broadcast.emit(Broadcast.OnRegistrationState(state))
+                _broadcast.emit(Broadcast.OnRegistrationState(account))
             }
             when (state) {
                 RegistrationState.Ok -> {
@@ -67,11 +67,23 @@ class CallService : Service() {
             state: Call.State?,
             message: String
         ) {
-            println("$TAG: on call: $state")
             scope.launch {
-                _broadcast.emit(Broadcast.OnCallState(state))
+                _broadcast.emit(Broadcast.OnCallState(call))
+            }
+            when (state) {
+                Call.State.IncomingReceived -> {
+                    println("$TAG: on call incoming")
+                    onIncoming(call)
+                }
+                else -> {
+                    println("$TAG: on call: $state")
+                }
             }
         }
+    }
+
+    private fun onIncoming(call: Call) {
+        startActivity(Intent(this, CallActivity::class.java))
     }
 
     private fun onRegister(intent: Intent) {
@@ -117,29 +129,26 @@ class CallService : Service() {
         core.start()
     }
 
-    private fun onRequest(intent: Intent) {
-        println("$TAG: on request")
-        val type = intent.getStringExtra("type")
-        when (type) {
-            REGISTRATION_STATE -> {
-                scope.launch {
-                    val state = core?.defaultAccount?.state
-                    _broadcast.emit(Broadcast.OnRegistrationState(state))
-                }
-            }
-            EXIT -> {
-                stopSelf()
-            }
-        }
-    }
-
     private fun onStartCommand(intent: Intent) {
         when (intent.action) {
             ACTION_REGISTER -> {
                 onRegister(intent)
             }
-            ACTION_REQUEST -> {
-                onRequest(intent)
+            ACTION_REQUEST_REGISTRATION_STATE -> {
+                println("$TAG: on request registration state")
+                scope.launch {
+                    _broadcast.emit(Broadcast.OnRegistrationState(core?.defaultAccount))
+                }
+            }
+            ACTION_REQUEST_CALL_STATE -> {
+                println("$TAG: on request call state")
+                scope.launch {
+                    _broadcast.emit(Broadcast.OnCallState(core?.currentCall))
+                }
+            }
+            ACTION_EXIT -> {
+                println("$TAG: on exit")
+                stopSelf()
             }
         }
     }
@@ -184,7 +193,6 @@ class CallService : Service() {
             println("$TAG: core stop error: $e")
         }
         scope.launch {
-            val state = core?.defaultAccount?.state
             _broadcast.emit(Broadcast.OnRegistrationState(null))
         }
     }
