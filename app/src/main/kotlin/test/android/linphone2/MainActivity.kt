@@ -227,7 +227,7 @@ internal class MainActivity : AppCompatActivity() {
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
                     )
-                    it.hint = "port"
+                    it.hint = "port (default 5060)"
                     port = it
                     rows.addView(it)
                 }
