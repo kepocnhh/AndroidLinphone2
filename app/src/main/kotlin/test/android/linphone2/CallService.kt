@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import org.linphone.core.Account
+import org.linphone.core.AudioDevice
 import org.linphone.core.Call
 import org.linphone.core.Core
 import org.linphone.core.CoreListener
@@ -24,7 +25,7 @@ import org.linphone.core.TransportType
 class CallService : Service() {
     sealed interface Broadcast {
         class OnRegistrationState(val state: RegistrationState?, val account: Account?) : Broadcast
-        class OnCallState(val state: Call.State?, val call: Call?) : Broadcast
+        class OnCallState(val core: Core?, val state: Call.State?, val call: Call?) : Broadcast
     }
 
     companion object {
@@ -69,7 +70,7 @@ class CallService : Service() {
             message: String
         ) {
             scope.launch {
-                _broadcast.emit(Broadcast.OnCallState(state, call))
+                _broadcast.emit(Broadcast.OnCallState(core, state, call))
             }
             when (state) {
                 Call.State.IncomingReceived -> {
@@ -94,6 +95,10 @@ class CallService : Service() {
     }
 
     private fun onIncoming(call: Call) {
+        println("$TAG: on call incoming audio enabled: ${call.params.isAudioEnabled}")
+        println("$TAG: on call incoming audio direction: ${call.params.audioDirection}")
+        println("$TAG: on call incoming video enabled: ${call.params.isVideoEnabled}")
+        println("$TAG: on call incoming video direction: ${call.params.videoDirection}")
         startActivity(Intent(this, CallActivity::class.java))
     }
 
@@ -156,7 +161,7 @@ class CallService : Service() {
                 println("$TAG: on request call state")
                 scope.launch {
                     val call = core?.currentCall
-                    _broadcast.emit(Broadcast.OnCallState(call?.state, call))
+                    _broadcast.emit(Broadcast.OnCallState(core, call?.state, call))
                 }
             }
             ACTION_EXIT -> {
@@ -191,8 +196,9 @@ class CallService : Service() {
         val configPath: String? = null
         val factoryConfigPath: String? = null
         val systemContext: Any = this
-        core = Factory.instance().createCore(configPath, factoryConfigPath, systemContext).also {
-            it.setUserAgent(BuildConfig.APPLICATION_ID, BuildConfig.VERSION_NAME)
+        core = Factory.instance().createCore(configPath, factoryConfigPath, systemContext).also { core ->
+            core.setUserAgent(BuildConfig.APPLICATION_ID, BuildConfig.VERSION_NAME)
+            core.defaultInputAudioDevice = core.audioDevices.firstOrNull { it.type == AudioDevice.Type.Speaker }
         }
     }
 

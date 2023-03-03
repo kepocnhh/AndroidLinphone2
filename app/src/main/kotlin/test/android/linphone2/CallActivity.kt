@@ -9,6 +9,7 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -24,6 +25,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.linphone.core.Call
+import org.linphone.core.Core
+import org.linphone.core.MediaDirection
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,8 +43,9 @@ class CallActivity : AppCompatActivity() {
     private var addressTextView: TextView? = null
     private var accountTextView: TextView? = null
     private var timeTextView: TextView? = null
+    private var incomingView: TextureView? = null
 
-    private fun onIncoming(call: Call) {
+    private fun onIncomingReceived(core: Core, call: Call) {
         val address = call.remoteAddress.asStringUriOnly()
         checkNotNull(addressTextView).text = "address: $address"
         val username = call.remoteAddress.username
@@ -54,7 +58,12 @@ class CallActivity : AppCompatActivity() {
             it.setOnClickListener {
                 val isGranted = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
                 if (isGranted) {
-                    call.accept()
+//                    call.accept()
+                    val params = core.createCallParams(null) ?: TODO()
+                    params.isAudioEnabled = true
+                    params.isVideoEnabled = true
+                    params.videoDirection = MediaDirection.SendRecv
+                    call.acceptWithParams(params)
                 } else {
                     println("$TAG: no permission")
                     requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 42)
@@ -63,7 +72,7 @@ class CallActivity : AppCompatActivity() {
         }
     }
 
-    private fun onStreamsRunning(call: Call) {
+    private fun onStreamsRunning(core: Core, call: Call) {
         val address = call.remoteAddress.asStringUriOnly()
         checkNotNull(addressTextView).text = "address: $address"
         val username = call.remoteAddress.username
@@ -87,6 +96,15 @@ class CallActivity : AppCompatActivity() {
                 delay(1.seconds)
             }
         }
+//        when (call.params.videoDirection) {
+        when (call.currentParams.videoDirection) {
+            MediaDirection.SendRecv -> {
+                core.nativeVideoWindowId = incomingView
+            }
+            else -> {
+                // noop
+            }
+        }
     }
 
     private fun onBroadcast(broadcast: CallService.Broadcast) {
@@ -96,13 +114,15 @@ class CallActivity : AppCompatActivity() {
                 when (broadcast.state) {
                     Call.State.IncomingReceived -> {
                         println("$TAG: on call incoming")
+                        val core = broadcast.core ?: TODO()
                         val call = broadcast.call ?: TODO()
-                        onIncoming(call)
+                        onIncomingReceived(core, call)
                     }
                     Call.State.StreamsRunning -> {
                         println("$TAG: on call streams running")
+                        val core = broadcast.core ?: TODO()
                         val call = broadcast.call ?: TODO()
-                        onStreamsRunning(call)
+                        onStreamsRunning(core, call)
                     }
                     Call.State.Released -> {
                         println("$TAG: on call released")
@@ -132,11 +152,21 @@ class CallActivity : AppCompatActivity() {
         super.onCreate(inState)
         val context: Context = this
         FrameLayout(context).also { root ->
+            root.keepScreenOn = true
             root.background = ColorDrawable(Color.BLACK)
             root.layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            TextureView(this).also {
+                it.layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    Gravity.CENTER
+                )
+                incomingView = it
+                root.addView(it)
+            }
             LinearLayout(context).also { rows ->
                 rows.layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
